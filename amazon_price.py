@@ -9,17 +9,18 @@ from selenium.webdriver.chrome.options import Options
 
 
 def get_excel_path():
-    primary_path = r"C:\Users\sai\OneDrive\Desktop\flipkart\FK Walkthrough 10th aug.xlsx"
-    secondary_path = r"C:\Users\sai\OneDrive\Desktop\flipkart\FK Walkthrough 10th aug"
+    """
+    Locates the target Excel file in the repository root directory.
+    """
+    primary_path = "FK Walkthrough 10th aug.xlsx"
+    secondary_path = "FK Walkthrough 10th aug"
 
     if os.path.exists(primary_path):
         return primary_path
     elif os.path.exists(secondary_path):
         return secondary_path
     else:
-        raise FileNotFoundError(
-            f"Could not locate 'FK Walkthrough 10th aug.xlsx' in {os.path.dirname(primary_path)}"
-        )
+        raise FileNotFoundError("Could not locate 'FK Walkthrough 10th aug.xlsx' in project root.")
 
 
 def get_amazon_data(html_source):
@@ -79,8 +80,6 @@ def get_amazon_data(html_source):
 
     # 3. Extract Rating strictly from the primary title header area (#averageCustomerReviews)
     rating = "N/A"
-    
-    # Restrict search area to the main customer reviews container under product title
     main_rating_container = soup.select_one(
         "#averageCustomerReviews, #acrPopover, #centerCol #averageCustomerReviews"
     )
@@ -118,14 +117,16 @@ def process_amazon_home():
     excel_file = get_excel_path()
     wb = openpyxl.load_workbook(excel_file)
 
-    # Launch Chrome in Incognito mode
+    # Configure Headless Chrome Options for Cloud Server/Cron Execution
     chrome_options = Options()
+    chrome_options.add_argument("--headless=new")  # Required for server environments without display
     chrome_options.add_argument("--incognito")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--start-maximized")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--window-size=1920,1080")
 
-    print("Launching Chrome in Incognito Mode...")
+    print("Launching Headless Chrome Driver...")
     driver = webdriver.Chrome(options=chrome_options)
 
     # Locate 'amazon home' or 'amzon home' sheet
@@ -142,7 +143,7 @@ def process_amazon_home():
         return
 
     ws = wb[target_sheet_name]
-    print(f"\n{'=' * 80}\nProcessing Sheet: '{target_sheet_name}' (Incognito Mode)\n{'=' * 80}")
+    print(f"\n{'=' * 80}\nProcessing Sheet: '{target_sheet_name}' (Headless Server Mode)\n{'=' * 80}")
 
     headers = [str(cell.value).strip() if cell.value is not None else "" for cell in ws[1]]
 
