@@ -1,4 +1,4 @@
-  name: Scheduled Amazon Scraper
+name: Scheduled Amazon Scraper
 
 on:
   schedule:
