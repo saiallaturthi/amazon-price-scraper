@@ -9,10 +9,6 @@ from selenium.webdriver.chrome.options import Options
 
 
 def get_excel_path():
-    """
-    Resolves file path dynamically for local Windows environments 
-    as well as GitHub Actions runner environments.
-    """
     local_primary = r"C:\Users\sai\OneDrive\Desktop\flipkart\FK Walkthrough 10th aug.xlsx"
     github_primary = "FK Walkthrough 10th aug.xlsx"
 
@@ -27,13 +23,13 @@ def get_excel_path():
 
 
 def get_amazon_data(html_source):
-    """
-    Extracts price, rating, and deal tag strictly for the primary product.
-    Returns 'N/A' if the product is unavailable or lacks specific attributes.
-    """
     soup = BeautifulSoup(html_source, "html.parser")
 
-    # 1. Check if the product is Out of Stock / Currently Unavailable
+    # 1. Check for CAPTCHA or Bot Detection Pages
+    if "api-services-support@amazon.com" in html_source.lower() or "enter the characters you see below" in html_source.lower():
+        print(" [Warning] Amazon CAPTCHA / Bot detection triggered!")
+
+    # 2. Check if the product is Out of Stock / Currently Unavailable
     out_of_stock_elem = soup.select_one("#availability, .a-color-price, .a-size-medium.a-color-state")
     if out_of_stock_elem and "currently unavailable" in out_of_stock_elem.get_text().lower():
         return "N/A", "N/A", "N/A"
@@ -43,7 +39,7 @@ def get_amazon_data(html_source):
         if not buybox_price:
             return "N/A", "N/A", "N/A"
 
-    # 2. Extract Price strictly from the main buybox/core price area
+    # 3. Extract Price strictly from the main buybox/core price area
     price = "N/A"
     price_selectors = [
         "#corePrice_feature_div .apex-pricetopay-value .a-offscreen",
@@ -81,7 +77,7 @@ def get_amazon_data(html_source):
                 except Exception:
                     continue
 
-    # 3. Extract Rating strictly from the primary title header area (#averageCustomerReviews)
+    # 4. Extract Rating strictly from main review section
     rating = "N/A"
     main_rating_container = soup.select_one(
         "#averageCustomerReviews, #acrPopover, #centerCol #averageCustomerReviews"
@@ -93,7 +89,7 @@ def get_amazon_data(html_source):
         if match:
             rating = match.group(1)
 
-    # 4. Extract Deal Tag strictly from the primary product header section
+    # 5. Extract Deal Tag
     tag = "N/A"
     if price != "N/A":
         tag_selectors = [
@@ -120,19 +116,27 @@ def process_amazon_home():
     excel_file = get_excel_path()
     wb = openpyxl.load_workbook(excel_file)
 
-    # Chrome Driver Options configured for Incognito and Headless Cron execution
+    # Robust Chrome Options to bypass Cloud Bot Detection
     chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--incognito")
-    chrome_options.add_argument("--headless=new")  # Enables silent headless mode for server environments
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1920,1080")
+    
+    # Custom Headers & Anti-Bot Spoofing Flags
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+    chrome_options.add_argument("--lang=en-US,en;q=0.9")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option("useAutomationExtension", False)
 
-    print("Launching Chrome in Incognito & Headless Mode...")
+    print("Launching Anti-Detection Headless Chrome Driver...")
     driver = webdriver.Chrome(options=chrome_options)
+    
+    # Hide WebDriver presence from navigator JS object
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
-    # Locate 'amazon home' or 'amzon home' sheet
     target_sheet_name = None
     for name in wb.sheetnames:
         clean_name = name.strip().lower()
@@ -146,7 +150,7 @@ def process_amazon_home():
         return
 
     ws = wb[target_sheet_name]
-    print(f"\n{'=' * 80}\nProcessing Sheet: '{target_sheet_name}'\n{'=' * 80}")
+    print(f"\n{'=' * 80}\nProcessing Sheet: '{target_sheet_name}' (Bypass Anti-Bot Mode)\n{'=' * 80}")
 
     headers = [str(cell.value).strip() if cell.value is not None else "" for cell in ws[1]]
 
@@ -155,19 +159,16 @@ def process_amazon_home():
 
     url_col_idx = get_col_idx("URL", 3)
 
-    # Column for Current Price
     current_col_idx = get_col_idx("Current", -1)
     if current_col_idx == -1:
         current_col_idx = get_col_idx("Current Price", -1)
 
-    # Column for Rating
     rating_col_idx = get_col_idx("Ratings", -1)
     if rating_col_idx == -1:
         rating_col_idx = get_col_idx("Rating", -1)
     if rating_col_idx == -1:
         rating_col_idx = get_col_idx("Stars", -1)
 
-    # Column for Tag
     tag_col_idx = get_col_idx("Tag", -1)
     if tag_col_idx == -1:
         tag_col_idx = get_col_idx("Tag Name", -1)
@@ -194,7 +195,7 @@ def process_amazon_home():
         try:
             driver.get(url)
             
-            # Explicit 7-second sleep to allow full rendering of dynamic ratings and deal tags
+            # Wait 7 seconds for dynamic rendering
             time.sleep(7.0)
 
             price, rating, tag = get_amazon_data(driver.page_source)
@@ -226,7 +227,7 @@ def process_amazon_home():
             if tag_col_idx != -1:
                 ws.cell(row=row, column=tag_col_idx, value=tag)
 
-            # Terminal Output
+            # Log Progress
             print(f"[{row-1}/{total_rows-1}] ASIN: {asin_val} | Price: {price_str} | Rating: {rating} | Tag: {tag}")
 
         except Exception as err:
