@@ -10,17 +10,20 @@ from selenium.webdriver.chrome.options import Options
 
 def get_excel_path():
     """
-    Locates the target Excel file in the repository root directory.
+    Resolves file path dynamically for local Windows environments 
+    as well as GitHub Actions runner environments.
     """
-    primary_path = "FK Walkthrough 10th aug.xlsx"
-    secondary_path = "FK Walkthrough 10th aug"
+    local_primary = r"C:\Users\sai\OneDrive\Desktop\flipkart\FK Walkthrough 10th aug.xlsx"
+    github_primary = "FK Walkthrough 10th aug.xlsx"
 
-    if os.path.exists(primary_path):
-        return primary_path
-    elif os.path.exists(secondary_path):
-        return secondary_path
+    if os.path.exists(local_primary):
+        return local_primary
+    elif os.path.exists(github_primary):
+        return github_primary
+    elif os.path.exists("FK Walkthrough 10th aug"):
+        return "FK Walkthrough 10th aug"
     else:
-        raise FileNotFoundError("Could not locate 'FK Walkthrough 10th aug.xlsx' in project root.")
+        raise FileNotFoundError("Could not locate 'FK Walkthrough 10th aug.xlsx'.")
 
 
 def get_amazon_data(html_source):
@@ -117,16 +120,16 @@ def process_amazon_home():
     excel_file = get_excel_path()
     wb = openpyxl.load_workbook(excel_file)
 
-    # Configure Headless Chrome Options for Cloud Server/Cron Execution
+    # Chrome Driver Options configured for Incognito and Headless Cron execution
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new")  # Required for server environments without display
     chrome_options.add_argument("--incognito")
+    chrome_options.add_argument("--headless=new")  # Enables silent headless mode for server environments
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1920,1080")
 
-    print("Launching Headless Chrome Driver...")
+    print("Launching Chrome in Incognito & Headless Mode...")
     driver = webdriver.Chrome(options=chrome_options)
 
     # Locate 'amazon home' or 'amzon home' sheet
@@ -143,7 +146,7 @@ def process_amazon_home():
         return
 
     ws = wb[target_sheet_name]
-    print(f"\n{'=' * 80}\nProcessing Sheet: '{target_sheet_name}' (Headless Server Mode)\n{'=' * 80}")
+    print(f"\n{'=' * 80}\nProcessing Sheet: '{target_sheet_name}'\n{'=' * 80}")
 
     headers = [str(cell.value).strip() if cell.value is not None else "" for cell in ws[1]]
 
@@ -190,7 +193,9 @@ def process_amazon_home():
 
         try:
             driver.get(url)
-            time.sleep(1.0)
+            
+            # Explicit 7-second sleep to allow full rendering of dynamic ratings and deal tags
+            time.sleep(7.0)
 
             price, rating, tag = get_amazon_data(driver.page_source)
 
